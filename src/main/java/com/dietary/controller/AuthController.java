@@ -1,66 +1,63 @@
 package com.dietary.controller;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import java.util.Optional;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
-import com.dietary.dto.*;
+import com.dietary.dto.AuthRequestDTO;
+import com.dietary.dto.AuthResponseDTO;
+import com.dietary.dto.UserRegistrationDTO;
 import com.dietary.entity.User;
 import com.dietary.service.UserService;
 import com.dietary.util.JwtUtil;
 
-import java.util.Optional;
-
 @RestController
 @RequestMapping("/api/auth")
-@CrossOrigin
+@CrossOrigin(origins = "http://localhost:5173")
 public class AuthController {
 
-    @Autowired
-    private UserService service;
+    private final UserService service;
+    private final PasswordEncoder encoder;
+    private final JwtUtil jwtUtil;
 
-    @Autowired
-    private PasswordEncoder encoder;
-
-    @Autowired
-    private JwtUtil jwtUtil;
-
-    // REGISTER
-    @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody UserRegistrationDTO dto) {
-
-        User user = new User();
-        user.setName(dto.getName());
-        user.setEmail(dto.getEmail());
-        user.setPassword(dto.getPassword());
-
-        // 👑 ROLE LOGIC
-        if (dto.getRole() == null || dto.getRole().isEmpty()) {
-            user.setRole("USER");
-        } else {
-            user.setRole(dto.getRole());
-        }
-
-        return ResponseEntity.ok(service.register(user));
+    public AuthController(UserService service, PasswordEncoder encoder, JwtUtil jwtUtil) {
+        this.service = service;
+        this.encoder = encoder;
+        this.jwtUtil = jwtUtil;
     }
 
-    // LOGIN
+    @PostMapping("/register")
+    public ResponseEntity<?> register(@RequestBody UserRegistrationDTO dto) {
+        try {
+            User user = new User();
+            user.setName(dto.getName());
+            user.setEmail(dto.getEmail());
+            user.setPassword(dto.getPassword());
+            user.setRole(dto.getRole());
+
+            User savedUser = service.register(user);
+            return ResponseEntity.status(HttpStatus.CREATED).body(savedUser);
+        } catch (RuntimeException ex) {
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(ex.getMessage());
+        }
+    }
+
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody AuthRequestDTO request) {
+        Optional<User> userOpt = service.findByEmail(request.getEmail());
 
-        Optional<User> user = service.findByEmail(request.getEmail());
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
 
-        if (user.isPresent() && encoder.matches(request.getPassword(), user.get().getPassword())) {
-
-            String token = jwtUtil.generateToken(user.get().getEmail());
-
-            return ResponseEntity.ok(
-                    new AuthResponseDTO(token, user.get().getRole())
-            );
+            if (encoder.matches(request.getPassword(), user.getPassword())) {
+                String token = jwtUtil.generateToken(user.getEmail());
+                return ResponseEntity.ok(new AuthResponseDTO(token, user.getRole()));
+            }
         }
 
-        return ResponseEntity.status(401)
-                .body(new MessageResponseDTO("Invalid credentials"));
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
     }
 }
