@@ -10,23 +10,26 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 @Configuration
 public class SecurityConfig {
 
-    // 🔑 Password Encoder Bean
+    // 🔑 Password Encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // 🔐 Security Filter Chain (IMPORTANT)
+    // 🔐 Security Configuration
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http
-            .csrf(csrf -> csrf.disable()) // disable CSRF for APIs
+            .csrf(csrf -> csrf.disable()) // disable CSRF
+
             .authorizeHttpRequests(auth -> auth
-                .requestMatchers("/api/auth/**").permitAll() // allow login/register
-                .anyRequest().authenticated() // secure all other APIs
+                .requestMatchers("/", "/api/auth/**").permitAll() // ✅ allow homepage + auth APIs
+                .anyRequest().authenticated() // protect everything else
             )
-            .httpBasic(httpBasic -> {}); // enable basic auth (temporary)
+
+            .httpBasic(httpBasic -> httpBasic.disable()) // ❌ remove popup
+            .formLogin(form -> form.disable()); // ❌ remove login page
 
         return http.build();
     }
